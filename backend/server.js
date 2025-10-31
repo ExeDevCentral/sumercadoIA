@@ -8,12 +8,15 @@ dotenv.config();
 
 // Importar rutas
 const productosRoutes = require('./routes/productos.routes');
+const productosApiRoutes = require('./routes/productos.api.routes');
 const ventasRoutes = require('./routes/ventas.routes');
 const clientesRoutes = require('./routes/clientes.routes');
 const empleadosRoutes = require('./routes/empleados.routes');
 const iaRoutes = require('./routes/ia.routes');
 const dashboardRoutes = require('./routes/dashboard.routes');
 const authRoutes = require('./routes/auth.routes');
+const auditRoutes = require('./routes/audit.routes');
+const expirationsRoutes = require('./routes/expirations.routes');
 
 const app = express();
 
@@ -49,11 +52,15 @@ app.get('/', (req, res) => {
 
 app.use('/api/auth', authRoutes);
 app.use('/api/productos', productosRoutes);
+app.use('/api/products', productosApiRoutes); // new RESTful endpoints (v2/alternative paths)
+app.use('/api/purchases', require('./routes/purchases.routes'));
 app.use('/api/ventas', ventasRoutes);
 app.use('/api/clientes', clientesRoutes);
 app.use('/api/empleados', empleadosRoutes);
 app.use('/api/ia', iaRoutes);
 app.use('/api/dashboard', dashboardRoutes);
+app.use('/api/audit', auditRoutes);
+app.use('/api/expirations', expirationsRoutes);
 
 // Middleware de manejo de errores
 app.use((err, req, res, next) => {

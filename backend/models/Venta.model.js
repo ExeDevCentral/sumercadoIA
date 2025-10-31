@@ -7,6 +7,8 @@ const itemVentaSchema = new mongoose.Schema({
     ref: 'Producto',
     required: true
   },
+  batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', default: null },
+  batchCode: { type: String, trim: true },
   nombreProducto: String,
   cantidad: {
     type: Number,

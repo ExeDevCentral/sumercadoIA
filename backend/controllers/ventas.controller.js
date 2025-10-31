@@ -1,5 +1,6 @@
 const Venta = require('../models/Venta.model');
 const Producto = require('../models/Producto.model');
+const Batch = require('../models/Batch.model');
 const audit = require('../utils/audit');
 
 // Listar ventas (recientes)
@@ -12,59 +13,112 @@ exports.listar = async (req, res, next) => {
   }
 };
 
-// Crear venta (simple)
+// Crear venta (maneja lotes cuando se proporciona batchId en items)
 exports.crear = async (req, res, next) => {
   try {
-    const { items, subtotal, iva, impuestos, total, metodoPago, detallesPago, empleado, cliente } = req.body;
+    const { items, metodoPago, detallesPago, cliente, empleado, notas } = req.body;
 
     if (!items || !Array.isArray(items) || items.length === 0) {
       return res.status(400).json({ success: false, message: 'La venta debe incluir al menos un item' });
     }
 
-    // Opción: validar que cada producto exista y actualizar stock si corresponde
-    for (const it of items) {
-      if (!it.producto) continue;
-      const prod = await Producto.findById(it.producto);
-      if (prod) {
-        // Decrementar stock si hay suficiente (no obligatorio aquí)
-        if (prod.stock - it.cantidad >= 0) {
-          prod.stock = prod.stock - it.cantidad;
-          await prod.save();
-        }
+    // Validar stock y calcular totales
+    let subtotal = 0;
+    const itemsConDetalles = [];
+
+    for (const item of items) {
+      const producto = await Producto.findById(item.producto);
+      if (!producto) {
+        return res.status(404).json({ success: false, message: `Producto ${item.producto} no encontrado` });
       }
+
+      // Determine current stock field (support legacy 'stock' and new 'stockActual')
+      const currentStock = (typeof producto.stockActual === 'number') ? producto.stockActual : (typeof producto.stock === 'number' ? producto.stock : 0);
+      if (currentStock < item.cantidad) {
+        return res.status(400).json({ success: false, message: `Stock insuficiente para ${producto.nombre}. Disponible: ${currentStock}` });
+      }
+
+      // Determine unit price (support precioVenta or precio)
+      const precioUnitario = producto.precioVenta ?? producto.precio ?? 0;
+      const subtotalItem = precioUnitario * item.cantidad;
+
+      // If batch specified, decrement batch quantity
+      let batchRef = null;
+      let batchCode = null;
+      if (item.batchId) {
+        const batch = await Batch.findById(item.batchId);
+        if (!batch) {
+          return res.status(404).json({ success: false, message: `Lote ${item.batchId} no encontrado` });
+        }
+        if (batch.quantityRemaining < item.cantidad) {
+          return res.status(400).json({ success: false, message: `Cantidad insuficiente en lote ${batch.batchCode}. Disponible: ${batch.quantityRemaining}` });
+        }
+        // decrement batch
+        batch.quantityRemaining -= item.cantidad;
+        await batch.save();
+        batchRef = batch._id;
+        batchCode = batch.batchCode;
+      }
+
+      // Decrement product stock (prefer stockActual)
+      if (typeof producto.stockActual === 'number') {
+        producto.stockActual -= item.cantidad;
+      } else if (typeof producto.stock === 'number') {
+        producto.stock -= item.cantidad;
+      }
+      await producto.save();
+
+      itemsConDetalles.push({
+        producto: producto._id,
+        batch: batchRef,
+        batchCode,
+        nombreProducto: producto.nombre,
+        cantidad: item.cantidad,
+        precioUnitario,
+        subtotal: subtotalItem
+      });
+
+      subtotal += subtotalItem;
     }
 
-    // Crear venta con datos de auditoría
-    const venta = new Venta({ 
-      items, 
-      subtotal, 
-      iva, 
-      impuestos, 
-      total, 
-      metodoPago, 
-      detallesPago, 
-      empleado, 
-      cliente,
-      createdBy: req.user.id,
-      updatedBy: req.user.id
-    });
-    
-    await venta.save();
+    const iva = process.env.IVA_PERCENTAGE || 21;
+    const impuestos = subtotal * (iva / 100);
+    const total = subtotal + impuestos;
 
-    // Registrar evento de auditoría con detalles de pago
+    // Crear venta
+    const venta = await Venta.create({
+      items: itemsConDetalles,
+      subtotal,
+      iva,
+      impuestos,
+      total,
+      metodoPago,
+      detallesPago,
+      cliente: cliente || null,
+      empleado,
+      notas,
+      createdBy: req.user?.id,
+      updatedBy: req.user?.id
+    });
+
+    // Registro de auditoría
     await audit.create('venta', {
       descripcion: `Venta #${venta.numeroTicket} por ${total} (${metodoPago})`,
       usuario: req.user,
-      identificador: venta.numeroTicket,
+      identificador: venta.numeroTicket
     });
 
-    res.status(201).json({ success: true, data: venta });
+    const ventaCompleta = await Venta.findById(venta._id)
+      .populate('empleado', 'nombre apellidos')
+      .populate('cliente', 'nombre apellidos')
+      .populate('items.producto', 'nombre codigo')
+      .populate('items.batch', 'batchCode expirationDate');
+
+    res.status(201).json({ success: true, message: 'Venta registrada exitosamente', data: ventaCompleta });
   } catch (err) {
     next(err);
   }
 };
-const Venta = require('../models/Venta.model');
-const Producto = require('../models/Producto.model');
 const Cliente = require('../models/Cliente.model');
 const Empleado = require('../models/Empleado.model');
 
@@ -284,9 +338,30 @@ exports.cancelarVenta = async (req, res) => {
     
     // Devolver stock
     for (const item of venta.items) {
-      await Producto.findByIdAndUpdate(item.producto, {
-        $inc: { stock: item.cantidad }
-      });
+      // Restore product stock
+      const producto = await Producto.findById(item.producto);
+      if (producto) {
+        if (typeof producto.stockActual === 'number') {
+          producto.stockActual += item.cantidad;
+        } else if (typeof producto.stock === 'number') {
+          producto.stock += item.cantidad;
+        }
+        await producto.save();
+      }
+
+      // If sale item referenced a batch, restore batch quantityRemaining
+      if (item.batch) {
+        try {
+          const batch = await Batch.findById(item.batch);
+          if (batch) {
+            batch.quantityRemaining += item.cantidad;
+            await batch.save();
+          }
+        } catch (err) {
+          // Non-fatal: continue
+          console.warn('Error restaurando lote:', err.message);
+        }
+      }
     }
     
     venta.estado = 'cancelada';

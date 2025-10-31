@@ -41,7 +41,6 @@ exports.crear = async (req, res, next) => {
     next(err);
   }
 };
-const Cliente = require('../models/Cliente.model');
 const Venta = require('../models/Venta.model');
 
 // @desc    Obtener todos los clientes

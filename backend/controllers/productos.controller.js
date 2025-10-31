@@ -49,7 +49,6 @@ exports.crear = async (req, res, next) => {
     next(err);
   }
 };
-const Producto = require('../models/Producto.model');
 
 // @desc    Obtener todos los productos
 // @route   GET /api/productos

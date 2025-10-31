@@ -40,7 +40,7 @@ exports.crear = async (req, res, next) => {
     next(err);
   }
 };
-const Empleado = require('../models/Empleado.model');
+ 
 
 // @desc    Obtener todos los empleados
 // @route   GET /api/empleados
