@@ -9,4 +9,9 @@ const { validateVentaCreate } = require('../middleware/validators');
 router.get('/', auth, requireAnyRole(['gerente', 'supervisor', 'cajero']), ventasCtrl.listar);
 router.post('/', auth, requireAnyRole(['gerente', 'supervisor', 'cajero']), validateVentaCreate, validarPago, ventasCtrl.crear);
 
+// ID routes
+const { validateIdParam } = require('../middleware/validators');
+router.get('/:id', auth, requireAnyRole(['gerente', 'supervisor', 'cajero']), validateIdParam('id'), ventasCtrl.obtenerVentaPorId);
+router.patch('/:id/cancelar', auth, requireAnyRole(['gerente', 'supervisor']), validateIdParam('id'), ventasCtrl.cancelarVenta);
+
 module.exports = router;

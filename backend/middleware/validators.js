@@ -66,6 +66,38 @@ const validateVentaCreate = [
   body('subtotal').isFloat({ gt: -1 }).withMessage('Subtotal inválido'),
   body('total').isFloat({ gt: 0 }).withMessage('Total debe ser mayor que 0'),
   body('metodoPago').isIn(['efectivo','tarjeta','transferencia','mixto']).withMessage('Método de pago inválido'),
+  // Consistencia: los subtotales de items deben sumar el subtotal y total debe coincidir considerando impuestos/iva
+  body().custom((value, { req }) => {
+    try {
+      const items = req.body.items || [];
+      const providedSubtotal = Number(req.body.subtotal || 0);
+      const providedImpuestos = req.body.impuestos != null ? Number(req.body.impuestos) : (req.body.iva != null ? (providedSubtotal * (Number(req.body.iva) / 100)) : 0);
+      const providedTotal = Number(req.body.total || 0);
+
+      // Calcular subtotal a partir de items
+      const computedSubtotal = items.reduce((acc, it) => {
+        const cantidad = Number(it.cantidad || 0);
+        const precio = Number(it.precioUnitario || 0);
+        return acc + (cantidad * precio);
+      }, 0);
+
+      // Comparaciones tolerantes: si números enteros (centimos) deben coincidir exactamente; permitimos tolerancia de 1 unidad
+      const tol = 1;
+      if (Math.abs(computedSubtotal - providedSubtotal) > tol) {
+        throw new Error(`Subtotal inconsistente: items suman ${computedSubtotal} pero se indicó ${providedSubtotal}`);
+      }
+
+      // Determinar total esperado
+      const expectedTotal = providedSubtotal + providedImpuestos;
+      if (Math.abs(expectedTotal - providedTotal) > tol) {
+        throw new Error(`Total inconsistente: subtotal + impuestos = ${expectedTotal} pero se indicó ${providedTotal}`);
+      }
+
+      return true;
+    } catch (err) {
+      throw err;
+    }
+  }),
   handleValidation
 ];
 
