@@ -71,7 +71,7 @@ Qué falta y próximos pasos recomendados
 
 Contacto / notas
 
-Si quieres que yo haga el push de estos cambios a GitHub (origin/master o una rama nueva), dime a qué rama prefieres y lo hago. También puedo ejecutar la limpieza de `node_modules` y reescribir la historia en una rama separada si prefieres no exponer los binarios en la rama principal.
+exemetal@hotmail.com   Exepaginasweb.com
 
 ---
 Archivo generado automáticamente por la sesión de desarrollo del equipo.
