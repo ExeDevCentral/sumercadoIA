@@ -108,4 +108,7 @@ ventaSchema.index({ createdAt: -1 });
 ventaSchema.index({ empleado: 1 });
 ventaSchema.index({ cliente: 1 });
 
+// Añadir plugin de auditoría
+withAudit(ventaSchema);
+
 module.exports = mongoose.model('Venta', ventaSchema);

@@ -1,5 +1,6 @@
 const mongoose = require('mongoose');
 const bcrypt = require('bcryptjs');
+const withAudit = require('./plugins/audit');
 
 const turnoSchema = new mongoose.Schema({
   fecha: {
@@ -133,5 +134,8 @@ empleadoSchema.methods.compararPassword = async function(passwordIngresada) {
 empleadoSchema.index({ email: 1 });
 empleadoSchema.index({ dni: 1 });
 empleadoSchema.index({ rol: 1 });
+
+// Añadir plugin de auditoría
+withAudit(empleadoSchema);
 
 module.exports = mongoose.model('Empleado', empleadoSchema);

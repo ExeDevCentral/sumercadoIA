@@ -1,4 +1,5 @@
 const mongoose = require('mongoose');
+const withAudit = require('./plugins/audit');
 
 const clienteSchema = new mongoose.Schema({
   nombre: {
@@ -104,5 +105,8 @@ clienteSchema.methods.actualizarNivel = function() {
 clienteSchema.index({ email: 1 });
 clienteSchema.index({ dni: 1 });
 clienteSchema.index({ nombre: 'text', apellidos: 'text' });
+
+// Añadir plugin de auditoría
+withAudit(clienteSchema);
 
 module.exports = mongoose.model('Cliente', clienteSchema);

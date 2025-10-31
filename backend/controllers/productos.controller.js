@@ -1,4 +1,5 @@
 const Producto = require('../models/Producto.model');
+const audit = require('../utils/audit');
 
 // Listar productos (paginación simple opcional)
 exports.listar = async (req, res, next) => {
@@ -128,8 +129,19 @@ exports.obtenerProductoPorId = async (req, res) => {
 // @access  Private
 exports.crearProducto = async (req, res) => {
   try {
+    // Añadir auditoría a la payload
+    req.body.createdBy = req.user ? req.user.id : null;
+    req.body.updatedBy = req.user ? req.user.id : null;
+
     const producto = await Producto.create(req.body);
     
+    // Registrar auditoría
+    await audit.create('producto', {
+      descripcion: `Producto ${producto.nombre} creado con código ${producto.codigo}`,
+      usuario: req.user || { id: 'system', email: 'system' },
+      identificador: producto.codigo
+    });
+
     res.status(201).json({ 
       success: true, 
       message: 'Producto creado exitosamente',
@@ -156,9 +168,12 @@ exports.crearProducto = async (req, res) => {
 // @access  Private
 exports.actualizarProducto = async (req, res) => {
   try {
+    // Añadir updatedBy
+    const updatePayload = Object.assign({}, req.body, { updatedBy: req.user.id });
+
     const producto = await Producto.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updatePayload,
       { new: true, runValidators: true }
     );
     
@@ -173,6 +188,13 @@ exports.actualizarProducto = async (req, res) => {
       success: true, 
       message: 'Producto actualizado exitosamente',
       data: producto 
+    });
+
+    // Auditoría de actualización
+    await audit.update('producto', {
+      descripcion: `Producto ${producto.nombre} actualizado`,
+      usuario: req.user,
+      identificador: producto._id
     });
   } catch (error) {
     res.status(400).json({ 
@@ -200,6 +222,13 @@ exports.eliminarProducto = async (req, res) => {
     res.json({ 
       success: true, 
       message: 'Producto eliminado exitosamente' 
+    });
+
+    // Auditoría de eliminación
+    await audit.delete('producto', {
+      descripcion: `Producto ${producto.nombre} eliminado`,
+      usuario: req.user,
+      identificador: producto._id
     });
   } catch (error) {
     res.status(500).json({ 

@@ -89,4 +89,7 @@ productoSchema.index({ nombre: 'text', descripcion: 'text' });
 productoSchema.index({ categoria: 1 });
 productoSchema.index({ codigo: 1 });
 
+// Añadir plugin de auditoría
+withAudit(productoSchema);
+
 module.exports = mongoose.model('Producto', productoSchema);

@@ -1,4 +1,5 @@
 const Empleado = require('../models/Empleado.model');
+const audit = require('../utils/audit');
 
 // Listar empleados
 exports.listar = async (req, res, next) => {
@@ -21,10 +22,19 @@ exports.crear = async (req, res, next) => {
     const existente = await Empleado.findOne({ email });
     if (existente) return res.status(409).json({ success: false, message: 'Email ya registrado' });
 
-    const empleado = new Empleado({ nombre, apellidos, email, password, dni, telefono, salario, rol });
+    // Añadir campos de auditoría
+    const empleado = new Empleado({ nombre, apellidos, email, password, dni, telefono, salario, rol, createdBy: req.user.id, updatedBy: req.user.id });
     await empleado.save();
     const obj = empleado.toObject();
     delete obj.password;
+
+    // Registrar auditoría
+    await audit.create('empleado', {
+      descripcion: `Empleado ${empleado.nombreCompleto} creado`,
+      usuario: req.user,
+      identificador: empleado._id
+    });
+
     res.status(201).json({ success: true, data: obj });
   } catch (err) {
     next(err);
@@ -103,11 +113,22 @@ exports.obtenerEmpleadoPorId = async (req, res) => {
 // @access  Private (Admin)
 exports.crearEmpleado = async (req, res) => {
   try {
+    // Añadir auditoría a la payload
+    req.body.createdBy = req.user ? req.user.id : null;
+    req.body.updatedBy = req.user ? req.user.id : null;
+
     const empleado = await Empleado.create(req.body);
     
     // Remover password de la respuesta
     empleado.password = undefined;
-    
+
+    // Registrar auditoría
+    await audit.create('empleado', {
+      descripcion: `Empleado ${empleado.nombreCompleto} creado via API`,
+      usuario: req.user || { id: 'system', email: 'system' },
+      identificador: empleado._id
+    });
+
     res.status(201).json({ 
       success: true, 
       message: 'Empleado registrado exitosamente',
@@ -137,9 +158,12 @@ exports.actualizarEmpleado = async (req, res) => {
     // No permitir actualizar password desde aquí
     delete req.body.password;
     
+    // Añadir updatedBy
+    const updatePayload = Object.assign({}, req.body, { updatedBy: req.user.id });
+
     const empleado = await Empleado.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updatePayload,
       { new: true, runValidators: true }
     ).select('-password');
     
@@ -154,6 +178,12 @@ exports.actualizarEmpleado = async (req, res) => {
       success: true, 
       message: 'Empleado actualizado exitosamente',
       data: empleado 
+    });
+    // Auditoría de actualización
+    await audit.update('empleado', {
+      descripcion: `Empleado ${empleado.nombreCompleto} actualizado`,
+      usuario: req.user,
+      identificador: empleado._id
     });
   } catch (error) {
     res.status(400).json({ 
@@ -186,6 +216,12 @@ exports.eliminarEmpleado = async (req, res) => {
       success: true, 
       message: 'Empleado desactivado exitosamente',
       data: empleado 
+    });
+    // Auditoría de eliminación (desactivación)
+    await audit.delete('empleado', {
+      descripcion: `Empleado ${empleado.nombreCompleto} desactivado`,
+      usuario: req.user,
+      identificador: empleado._id
     });
   } catch (error) {
     res.status(500).json({ 

@@ -1,4 +1,5 @@
 const Cliente = require('../models/Cliente.model');
+const audit = require('../utils/audit');
 
 // Listar clientes
 exports.listar = async (req, res, next) => {
@@ -21,8 +22,20 @@ exports.crear = async (req, res, next) => {
     const existente = await Cliente.findOne({ email });
     if (existente) return res.status(409).json({ success: false, message: 'Email ya registrado' });
 
+    // Añadir auditoría a la payload
+    req.body.createdBy = req.user ? req.user.id : null;
+    req.body.updatedBy = req.user ? req.user.id : null;
+
     const cliente = new Cliente(req.body);
     await cliente.save();
+
+    // Registrar auditoría
+    await audit.create('cliente', {
+      descripcion: `Cliente ${cliente.nombre} ${cliente.apellidos} creado`,
+      usuario: req.user || { id: 'system', email: 'system' },
+      identificador: cliente._id
+    });
+
     res.status(201).json({ success: true, data: cliente });
   } catch (err) {
     next(err);
@@ -136,9 +149,12 @@ exports.crearCliente = async (req, res) => {
 // @access  Private
 exports.actualizarCliente = async (req, res) => {
   try {
+    // Añadir updatedBy
+    const updatePayload = Object.assign({}, req.body, { updatedBy: req.user.id });
+
     const cliente = await Cliente.findByIdAndUpdate(
       req.params.id,
-      req.body,
+      updatePayload,
       { new: true, runValidators: true }
     );
     
@@ -153,6 +169,13 @@ exports.actualizarCliente = async (req, res) => {
       success: true, 
       message: 'Cliente actualizado exitosamente',
       data: cliente 
+    });
+
+    // Auditoría de actualización
+    await audit.update('cliente', {
+      descripcion: `Cliente ${cliente.nombre} ${cliente.apellidos} actualizado`,
+      usuario: req.user,
+      identificador: cliente._id
     });
   } catch (error) {
     res.status(400).json({ 
@@ -185,6 +208,13 @@ exports.eliminarCliente = async (req, res) => {
       success: true, 
       message: 'Cliente desactivado exitosamente',
       data: cliente 
+    });
+
+    // Auditoría de eliminación (desactivación)
+    await audit.delete('cliente', {
+      descripcion: `Cliente ${cliente.nombre} ${cliente.apellidos} desactivado`,
+      usuario: req.user,
+      identificador: cliente._id
     });
   } catch (error) {
     res.status(500).json({ 
