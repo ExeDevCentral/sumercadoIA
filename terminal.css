@@ -54,3 +54,30 @@ button {
 button:hover {
     background-color: #005c24;
 }
+
+/* Mobile Responsive Terminal */
+@media (max-width: 500px) {
+    body {
+        margin: 10px;
+    }
+    #terminal {
+        width: 100% !important;
+        margin: 10px auto !important;
+        border-radius: 12px;
+    }
+    #controls {
+        flex-direction: column !important;
+        padding: 14px !important;
+    }
+    #barcode-input {
+        width: 100% !important;
+        min-height: 48px !important;
+        font-size: 16px !important;
+        box-sizing: border-box !important;
+    }
+    #controls button {
+        width: 100% !important;
+        min-height: 48px !important;
+        font-size: 16px !important;
+    }
+}
